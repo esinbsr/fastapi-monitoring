@@ -1,0 +1,62 @@
+from contextlib import asynccontextmanager
+import os
+import sys
+from fastapi import FastAPI
+from sqlmodel import SQLModel
+import json
+from typing import Dict, Any
+from app.database import engine
+from app.routes import items_router
+from prometheus_fastapi_instrumentator import Instrumentator
+from app.monitoring.metrics import app_info
+
+DEBUG_MODE = True
+UNUSED_VAR = "cette variable n'est jamais utilisée"
+
+
+@asynccontextmanager
+async def lifespan(fastapi_app: FastAPI):
+    SQLModel.metadata.create_all(engine)
+
+# publie des infos statiques utile (version/envs) dans les métriques
+    app_info.info({
+        "version" : "1.0.0",
+        "environnement": "development",
+    })
+    yield
+
+
+app = FastAPI(
+    title="Items CRUD API",
+    description="API pour gérer une liste d'articles",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+#  ajoute les métriques http automatiques (requêtes, latences, statuts)
+instrumentator = Instrumentator(
+    should_group_status_codes=False,
+    should_ignore_untemplated=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=["/metrics"], #évite que /metrics se mesure lui mm
+)
+
+# crée le endpoint que prometheus va scrapper
+instrumentator.instrument(app).expose(app, endpoint="/metrics")
+
+app.include_router(items_router)
+
+
+@app.get("/")
+def root():
+    return {"message": "Items CRUD API"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+
+secret = "fezffzefzefzlfzhfzfzfjzfzfzfdzgerg54g651fzefg51zeg5g"
+API_KEY = "sk-1234567890abcdef"
+
+very_long_variable_name_that_exceeds_line_length = "Cette ligne est intentionnellement trop longue pour violer les règles de formatage standard"
